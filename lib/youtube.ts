@@ -5,6 +5,7 @@
  */
 import { execFile, execFileSync } from 'child_process';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 
 export const UA =
@@ -185,6 +186,63 @@ export function getFfmpegLocation(): string | null {
   return null;
 }
 
+/**
+ * FIX 2026-11-10 — YouTube bot-check on datacentre IPs.
+ * yt-dlp can solve YouTube's JS challenges itself when it has a JS runtime:
+ * `--js-runtimes node` makes the web client work again on blocked IPs
+ * (verified locally: real merged 720p av1 1280x720 + opus, same 5,968,337
+ * bytes as the earlier clean-IP test). Node is on PATH both locally and on
+ * Render (Node runtime), so this is on by default. If node is missing the
+ * flag is skipped and the old behaviour (web -> android fallback) applies.
+ */
+let jsRuntimeArgs: string[] | null = null;
+export function getJsRuntimeArgs(): string[] {
+  if (jsRuntimeArgs !== null) return jsRuntimeArgs;
+  jsRuntimeArgs = [];
+  try {
+    execFileSync('node', ['--version'], { timeout: 10000, stdio: 'pipe' });
+    jsRuntimeArgs = ['--js-runtimes', 'node'];
+    console.log('[yt-dl] JS runtime: node (bot-check solver on)');
+  } catch {
+    console.log('[yt-dl] JS runtime: node not found, skipping --js-runtimes');
+  }
+  return jsRuntimeArgs;
+}
+
+/**
+ * Optional extra layer if YouTube tightens again: a logged-in YouTube
+ * session's cookies. Sources, in order:
+ *  1. YT_COOKIES_B64 env var — base64 of a Netscape cookies.txt (set in the
+ *     Render dashboard only, never paste cookies in chat).
+ *  2. YT_COOKIES_FILE env var — path to a cookies.txt file.
+ *  3. ./cookies.txt in the project root (local runs; git-ignored).
+ * Returns [] when no cookies are configured — normal case.
+ */
+let cookiesArgs: string[] | null = null;
+export function getCookiesArgs(): string[] {
+  if (cookiesArgs !== null) return cookiesArgs;
+  cookiesArgs = [];
+  try {
+    let file = '';
+    if (process.env.YT_COOKIES_B64) {
+      file = path.join(os.tmpdir(), 'yt-cookies.txt');
+      fs.writeFileSync(file, Buffer.from(process.env.YT_COOKIES_B64, 'base64').toString('utf-8'), { mode: 0o600 });
+    } else if (process.env.YT_COOKIES_FILE) {
+      file = process.env.YT_COOKIES_FILE;
+    } else {
+      const local = path.join(process.cwd(), 'cookies.txt');
+      if (fs.existsSync(local) && fs.statSync(local).size > 0) file = local;
+    }
+    if (file && fs.existsSync(file) && fs.statSync(file).size > 0) {
+      cookiesArgs = ['--cookies', file];
+      console.log('[yt-dl] cookies: using', file);
+    }
+  } catch (e) {
+    console.warn('[yt-dl] cookies setup failed, continuing without:', e instanceof Error ? e.message : e);
+  }
+  return cookiesArgs;
+}
+
 /* ---------------- channel listing ---------------- */
 
 export class ChannelError extends Error {
@@ -232,6 +290,8 @@ export async function fetchChannelVideos(
   }
   const args = [
     ...ytdlp.args,
+    ...getJsRuntimeArgs(),
+    ...getCookiesArgs(),
     '--flat-playlist',
     '-J',
     '--no-warnings',
@@ -318,6 +378,8 @@ export function downloadVideo(
     const isAudio = quality === 'audio';
     const baseArgs: string[] = [
       ...ytdlp.args,
+      ...getJsRuntimeArgs(),
+      ...getCookiesArgs(),
       '--no-playlist',
       '--no-warnings',
       '--no-check-certificates',
@@ -353,7 +415,9 @@ export function downloadVideo(
         );
       });
 
-    // Attempt 1: default (web) client — full HD when the server IP is clean.
+    // Attempt 1: default (web) client + `--js-runtimes node`, which solves
+    // YouTube's JS challenges — this is what unblocks datacentre IPs
+    // (verified 2026-11-10: real merged 720p on a blocked IP).
     // Attempt 2 (only on YouTube bot-check): Android player client. On
     // blocked IPs this is the only client that still serves a stream, but
     // YouTube caps it at 360p progressive — so the file may come back at
