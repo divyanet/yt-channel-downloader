@@ -54,6 +54,27 @@ Tested: 2026-11-10 (IST), on this VM. yt-dlp 2026.10.26 (`./yt-dlp-bin`), ffmpeg
   (datacentre IP) the same intermittency may appear; the android fallback
   keeps downloads working, at 360p worst case.
 
+## FIX 2026-11-10 — YouTube bot-check on Render (live download failed)
+
+- Live (Render, Singapore datacentre IP): `/api/download` 720p failed 3x with
+  `DOWNLOAD_FAILED` bot-check — web client AND Android fallback both blocked.
+- Probing: Piped instances all down (526/502/000), Invidious instances all
+  down/blocked (403/502/000) — no mirror fallback is reliable right now.
+- Fix that WORKED: `--js-runtimes node` — yt-dlp solves YouTube's JS
+  challenges with the Node runtime (`[youtube] [jsc:node] Solving JS
+  challenges using node`). Implemented in `lib/youtube.ts`
+  (`getJsRuntimeArgs()` — auto-detected, skipped if node is missing;
+  applied to both channel listing and downloads) + optional cookies
+  support (`getCookiesArgs()`: `YT_COOKIES_B64` env / `YT_COOKIES_FILE` /
+  `./cookies.txt`, git-ignored) as a second layer.
+- Local app test AFTER fix (through the real server, port 3100):
+  `/api/download?videoId=MAvHgmewRDM&quality=720` — HTTP 200,
+  **5,968,337 bytes**, ffprobe **av1 1280x720 + opus** — real merged 720p,
+  byte-identical to the earlier clean-IP test. Channel list still 17/17.
+  Log: `[yt-dl] JS runtime: node (bot-check solver on)`.
+- Node is on PATH on Render (Node runtime), so the fix should work live too
+  — live re-verification pending after redeploy.
+
 ## Not tested in v1
 
 - 1080p and 480p downloads (same code path as 720p, only format string differs).

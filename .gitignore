@@ -2,6 +2,7 @@ node_modules/
 .next/
 out/
 yt-dlp-bin
+cookies.txt
 ffmpeg-bin
 ffmpeg.tar.xz
 ffmpeg-*-static/

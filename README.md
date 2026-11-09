@@ -54,8 +54,15 @@ The app looks for ffmpeg at `./ffmpeg-bin` first (see `getFfmpegLocation`
 in `lib/youtube.ts`), so HD video+audio merging works on Render even
 though Render's free tier has no system ffmpeg. `render.yaml` in this repo
 holds the same commands for Render Blueprints. YouTube may rate-limit /
-bot-check datacentre IPs; that is a YouTube-side limit, not a bug in this
-tool.
+bot-check datacentre IPs; the app now passes `--js-runtimes node` to
+yt-dlp, which solves YouTube's JS challenges and unblocks downloads on
+blocked IPs (verified 2026-11-10: real merged 720p on a blocked IP — see
+TEST-REPORT.md). If YouTube tightens again, an optional second layer
+exists: a logged-in YouTube session's cookies. Set it ONLY in the Render
+dashboard (Environment → add `YT_COOKIES_B64` = base64 of a Netscape
+cookies.txt exported from your own browser while logged into YouTube) —
+never paste cookies in chat or commit them. Locally, a `./cookies.txt`
+file in the project root works the same way (it is git-ignored).
 `/api/download` retries once with the Android player client on a bot-check
 (that client still serves a stream, but YouTube caps it at 360p — see
 TEST-REPORT.md). On a residential IP, HD normally works first try.
