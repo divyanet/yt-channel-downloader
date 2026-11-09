@@ -1,0 +1,9 @@
+node_modules/
+.next/
+out/
+yt-dlp-bin
+ffmpeg-bin
+ffmpeg.tar.xz
+ffmpeg-*-static/
+*.log
+.DS_Store
